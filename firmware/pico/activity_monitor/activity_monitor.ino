@@ -1,210 +1,198 @@
 /*
- * zte-pico-tool — H3601P UART Activity Monitor
+ * zte-pico-tool — H3601P Activity Monitor v0.2.0
  *
- * Firmware version: 0.1.0
+ * Passive timing capture. GP2/GP3 are INPUT ONLY; the Pico never drives
+ * the ZTE target pins. Edge timestamps are captured with GPIO interrupts.
+ * This version measures timing and gives UART baud-rate heuristics; it does
+ * not decode or transmit UART data yet.
  *
- * PURPOSE
- * -------
- * Passive digital activity monitor for the first hardware investigation
- * of the ZTE H3601P UART test pads.
- *
- * GP2 and GP3 are INPUT ONLY. The firmware never drives the target pins.
- * GP2/GP3 are sampled and transition counts are reported over USB CDC.
- *
- * WIRING
- * -------
- * ZTE pad 2 -> Pico GP2
- * ZTE pad 3 -> Pico GP3
- * ZTE pad 4 -> Pico GND
- * ZTE pad 1 -> DO NOT CONNECT
- *
- * SAFETY
- * ------
- * - Do not connect ZTE pad 1 until its function is confirmed.
- * - Do not connect Pico VBUS/3V3 to the ZTE board.
- * - This firmware is intentionally read-only with respect to the target.
- * - Confirm target GPIO voltage before connecting signals to the Pico.
- *
- * SERIAL OUTPUT
- * -------------
- * Connect the Pico by USB and open its USB serial port at any baud rate
- * (USB CDC ignores the UART baud setting).
- *
- * Commands:
- *   ?      show help
- *   s      show current state
- *   r      reset counters
- *   m      monitor for 5 seconds
- *   c      continuous monitor (press any key to stop)
- *
- * The transition counter is intentionally simple. It is a diagnostic aid,
- * not yet a logic analyzer or UART decoder.
+ * Wiring:
+ *   ZTE pad 2 -> Pico GP2
+ *   ZTE pad 3 -> Pico GP3
+ *   ZTE pad 4 -> Pico GND
+ *   ZTE pad 1 -> DO NOT CONNECT
  */
 
 #include <Arduino.h>
 
 static const uint8_t PAD2_PIN = 2;
 static const uint8_t PAD3_PIN = 3;
-static const uint32_t SAMPLE_INTERVAL_US = 2;
+static const uint16_t MAX_EDGES = 4096;
+static const uint32_t MAX_DELTA_US = 5000;
 
-volatile uint32_t pad2_rising = 0;
-volatile uint32_t pad2_falling = 0;
-volatile uint32_t pad3_rising = 0;
-volatile uint32_t pad3_falling = 0;
+struct Edge { uint32_t timestamp; uint8_t level; };
 
-uint8_t last_state = 0;
+volatile Edge pad2_edges[MAX_EDGES];
+volatile Edge pad3_edges[MAX_EDGES];
+volatile uint16_t pad2_count = 0;
+volatile uint16_t pad3_count = 0;
+volatile bool capture_active = false;
 
-void resetCounters() {
+void onPad2Edge() {
+  if (!capture_active) return;
+  uint16_t i = pad2_count;
+  if (i < MAX_EDGES) {
+    pad2_edges[i].timestamp = micros();
+    pad2_edges[i].level = digitalRead(PAD2_PIN) ? 1 : 0;
+    pad2_count = i + 1;
+  }
+}
+
+void onPad3Edge() {
+  if (!capture_active) return;
+  uint16_t i = pad3_count;
+  if (i < MAX_EDGES) {
+    pad3_edges[i].timestamp = micros();
+    pad3_edges[i].level = digitalRead(PAD3_PIN) ? 1 : 0;
+    pad3_count = i + 1;
+  }
+}
+
+uint16_t countOf(volatile uint16_t &v) {
   noInterrupts();
-  pad2_rising = 0;
-  pad2_falling = 0;
-  pad3_rising = 0;
-  pad3_falling = 0;
+  uint16_t n = v;
+  interrupts();
+  return n;
+}
+
+void resetCapture() {
+  noInterrupts();
+  pad2_count = 0;
+  pad3_count = 0;
+  capture_active = false;
   interrupts();
 }
 
-void samplePins() {
-  uint8_t state = (digitalRead(PAD2_PIN) ? 0x01 : 0x00) |
-                  (digitalRead(PAD3_PIN) ? 0x02 : 0x00);
+void printBaudHeuristics(volatile Edge *edges, uint16_t count) {
+  const uint32_t baudRates[] = {1200,2400,4800,9600,19200,38400,57600,115200,230400,460800};
+  const size_t baudCount = sizeof(baudRates) / sizeof(baudRates[0]);
 
-  uint8_t changed = state ^ last_state;
+  Serial.println("Candidate UART baud rates (heuristic):");
+  for (size_t b = 0; b < baudCount; ++b) {
+    double bitUs = 1000000.0 / baudRates[b];
+    uint32_t matches = 0, samples = 0;
+    for (uint16_t i = 1; i < count; ++i) {
+      uint32_t d = edges[i].timestamp - edges[i - 1].timestamp;
+      if (d < 2 || d > MAX_DELTA_US) continue;
+      uint32_t multiple = (uint32_t)((d / bitUs) + 0.5);
+      if (multiple < 1) multiple = 1;
+      double expected = multiple * bitUs;
+      double error = ((double)d - expected) / expected;
+      samples++;
+      if (error >= -0.15 && error <= 0.15) matches++;
+    }
+    if (samples > 20) {
+      double score = 100.0 * matches / samples;
+      if (score >= 70.0) {
+        Serial.print("  "); Serial.print(baudRates[b]);
+        Serial.print(" baud -> "); Serial.print(score, 1);
+        Serial.println("% timing matches");
+      }
+    }
+  }
+}
 
-  if (changed & 0x01) {
-    if (state & 0x01) pad2_rising++;
-    else pad2_falling++;
+void printCaptureSummary(uint8_t pin, volatile Edge *edges, uint16_t count) {
+  Serial.print("\n--- GP"); Serial.print(pin); Serial.println(" timing capture ---");
+  Serial.print("Edges: "); Serial.println(count);
+  if (count < 2) { Serial.println("Insufficient edges for timing analysis."); return; }
+
+  uint32_t minDelta = 0xFFFFFFFFUL, maxDelta = 0;
+  uint64_t sum = 0; uint32_t valid = 0;
+  uint16_t histogram[251] = {0};
+
+  for (uint16_t i = 1; i < count; ++i) {
+    uint32_t d = edges[i].timestamp - edges[i - 1].timestamp;
+    if (d == 0 || d > MAX_DELTA_US) continue;
+    if (d < minDelta) minDelta = d;
+    if (d > maxDelta) maxDelta = d;
+    sum += d; valid++;
+    if (d <= 250 && histogram[d] < 65535) histogram[d]++;
   }
 
-  if (changed & 0x02) {
-    if (state & 0x02) pad3_rising++;
-    else pad3_falling++;
-  }
+  if (!valid) { Serial.println("No usable edge intervals found."); return; }
+  Serial.print("Min interval: "); Serial.print(minDelta); Serial.println(" us");
+  Serial.print("Max interval (<=5000 us): "); Serial.print(maxDelta); Serial.println(" us");
+  Serial.print("Average interval: "); Serial.print((double)sum / valid, 2); Serial.println(" us");
 
-  last_state = state;
+  Serial.println("Repeated short intervals (1..250 us):");
+  uint8_t printed = 0;
+  for (uint16_t us = 1; us <= 250; ++us) {
+    if (histogram[us] >= 2) {
+      Serial.print("  "); Serial.print(us); Serial.print(" us: "); Serial.println(histogram[us]);
+      if (++printed >= 20) break;
+    }
+  }
+  if (!printed) Serial.println("  none");
+  printBaudHeuristics(edges, count);
 }
 
 void printState() {
-  noInterrupts();
-  uint32_t p2r = pad2_rising;
-  uint32_t p2f = pad2_falling;
-  uint32_t p3r = pad3_rising;
-  uint32_t p3f = pad3_falling;
-  interrupts();
-
-  Serial.println();
-  Serial.println("=== ZTE Pico Activity Monitor 0.1.0 ===");
-  Serial.print("GP2 / ZTE pad 2: ");
-  Serial.print(digitalRead(PAD2_PIN) ? "HIGH" : "LOW");
-  Serial.print(" | rising=");
-  Serial.print(p2r);
-  Serial.print(" falling=");
-  Serial.println(p2f);
-
-  Serial.print("GP3 / ZTE pad 3: ");
-  Serial.print(digitalRead(PAD3_PIN) ? "HIGH" : "LOW");
-  Serial.print(" | rising=");
-  Serial.print(p3r);
-  Serial.print(" falling=");
-  Serial.println(p3f);
+  Serial.println("\n=== ZTE Pico Activity Monitor 0.2.0 ===");
+  Serial.print("GP2 / ZTE pad 2: "); Serial.print(digitalRead(PAD2_PIN) ? "HIGH" : "LOW");
+  Serial.print(" | edges="); Serial.println(countOf(pad2_count));
+  Serial.print("GP3 / ZTE pad 3: "); Serial.print(digitalRead(PAD3_PIN) ? "HIGH" : "LOW");
+  Serial.print(" | edges="); Serial.println(countOf(pad3_count));
 }
 
-void monitorFor(uint32_t durationMs, bool continuous) {
-  resetCounters();
-  last_state = (digitalRead(PAD2_PIN) ? 0x01 : 0x00) |
-               (digitalRead(PAD3_PIN) ? 0x02 : 0x00);
+void capture(uint32_t durationMs, bool continuous) {
+  resetCapture();
+  attachInterrupt(digitalPinToInterrupt(PAD2_PIN), onPad2Edge, CHANGE);
+  attachInterrupt(digitalPinToInterrupt(PAD3_PIN), onPad3Edge, CHANGE);
+  noInterrupts(); capture_active = true; interrupts();
 
-  uint32_t start = millis();
-  uint32_t lastReport = start;
+  uint32_t start = millis(), lastReport = start;
+  Serial.println(continuous ? "\nTiming capture continuously. Press any key to stop..." : "\nTiming capture for 5 seconds...");
+  Serial.println("Passive mode: Pico pins remain inputs.");
 
-  Serial.println();
-  Serial.println(continuous
-    ? "Monitoring continuously. Press any key to stop..."
-    : "Monitoring for 5 seconds...");
-
-  while (continuous || (millis() - start < durationMs)) {
-    uint32_t begin = micros();
-    samplePins();
-    while ((uint32_t)(micros() - begin) < SAMPLE_INTERVAL_US) {
-      tight_loop_contents();
-    }
-
-    if (millis() - lastReport >= 1000) {
-      lastReport = millis();
-      printState();
-    }
-
-    if (continuous && Serial.available()) {
-      while (Serial.available()) Serial.read();
-      break;
-    }
+  while (continuous || millis() - start < durationMs) {
+    if (millis() - lastReport >= 1000) { lastReport = millis(); printState(); }
+    if (continuous && Serial.available()) { while (Serial.available()) Serial.read(); break; }
+    if (countOf(pad2_count) >= MAX_EDGES && countOf(pad3_count) >= MAX_EDGES) break;
+    tight_loop_contents();
   }
 
-  Serial.println();
-  Serial.println("--- Capture result ---");
-  printState();
+  noInterrupts(); capture_active = false; interrupts();
+  detachInterrupt(digitalPinToInterrupt(PAD2_PIN));
+  detachInterrupt(digitalPinToInterrupt(PAD3_PIN));
+
+  uint16_t p2 = countOf(pad2_count), p3 = countOf(pad3_count);
+  Serial.println("\n=== Capture result ===");
+  printCaptureSummary(2, pad2_edges, p2);
+  printCaptureSummary(3, pad3_edges, p3);
 }
 
 void printHelp() {
-  Serial.println();
-  Serial.println("zte-pico-tool / Activity Monitor v0.1.0");
-  Serial.println("Passive monitor for H3601P pads 2 and 3.");
-  Serial.println();
+  Serial.println("\nzte-pico-tool / Activity Monitor v0.2.0");
+  Serial.println("Passive timing capture for H3601P pads 2 and 3.");
   Serial.println("Commands:");
   Serial.println("  ?  help");
-  Serial.println("  s  show current state/counters");
-  Serial.println("  r  reset counters");
-  Serial.println("  m  monitor for 5 seconds");
-  Serial.println("  c  continuous monitor; press key to stop");
-  Serial.println();
-  Serial.println("Wiring: pad2->GP2, pad3->GP3, pad4->GND.");
-  Serial.println("Pad1 MUST remain disconnected.");
+  Serial.println("  s  current state/capture counts");
+  Serial.println("  r  reset capture buffers");
+  Serial.println("  m  capture timing for 5 seconds");
+  Serial.println("  c  continuous timing capture; press key to stop");
+  Serial.println("Wiring: pad2->GP2, pad3->GP3, pad4->GND; pad1 disconnected.");
+  Serial.println("v0.2.0 measures timing only; it does not decode or transmit UART.");
 }
 
 void setup() {
-  pinMode(PAD2_PIN, INPUT);
-  pinMode(PAD3_PIN, INPUT);
-
-  Serial.begin(115200);
-  delay(1000);
-
-  last_state = (digitalRead(PAD2_PIN) ? 0x01 : 0x00) |
-               (digitalRead(PAD3_PIN) ? 0x02 : 0x00);
-
-  Serial.println();
-  Serial.println("zte-pico-tool / H3601P Activity Monitor v0.1.0");
-  Serial.println("Passive mode: GP2/GP3 are inputs only.");
-  Serial.println("Pad 1 is intentionally unused.");
+  pinMode(PAD2_PIN, INPUT); pinMode(PAD3_PIN, INPUT);
+  Serial.begin(115200); delay(1000);
+  Serial.println("\nzte-pico-tool / H3601P Activity Monitor v0.2.0");
+  Serial.println("Passive timing mode: GP2/GP3 are inputs only.");
   printHelp();
 }
 
 void loop() {
-  if (!Serial.available()) {
-    return;
-  }
-
+  if (!Serial.available()) return;
   char command = Serial.read();
-
   switch (command) {
-    case '?':
-      printHelp();
-      break;
-    case 's':
-      printState();
-      break;
-    case 'r':
-      resetCounters();
-      Serial.println("Counters reset.");
-      break;
-    case 'm':
-      monitorFor(5000, false);
-      break;
-    case 'c':
-      monitorFor(0, true);
-      break;
-    case '\n':
-    case '\r':
-      break;
-    default:
-      Serial.println("Unknown command. Press ? for help.");
-      break;
+    case '?': printHelp(); break;
+    case 's': printState(); break;
+    case 'r': resetCapture(); Serial.println("Capture buffers reset."); break;
+    case 'm': capture(5000, false); break;
+    case 'c': capture(0, true); break;
+    case '\n': case '\r': break;
+    default: Serial.println("Unknown command. Press ? for help."); break;
   }
 }
