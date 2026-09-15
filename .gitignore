@@ -1,0 +1,9 @@
+# Local capture data — keep raw captures outside Git by default
+captures/*
+!captures/README.md
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
