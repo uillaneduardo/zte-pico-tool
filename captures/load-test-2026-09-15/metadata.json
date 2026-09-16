@@ -1,0 +1,34 @@
+{
+  "schema_version": 1,
+  "device": "ZTE H3601P",
+  "hardware_revision": "unknown",
+  "firmware": "zte-pico-tool uart_capture v0.4.0",
+  "transport": "usb-cdc",
+  "capture_interface": "uart",
+  "baud": 115200,
+  "data_bits": 8,
+  "parity": "N",
+  "stop_bits": 1,
+  "mode": "passive-continuous-stream",
+  "protocol": "ZTE-CAPTURE-V1",
+  "started_at_utc": "2026-09-16T02:09:37.141364Z",
+  "finished_at_utc": "2026-09-16T02:18:29.261457Z",
+  "frames_received": 9458,
+  "bytes_received": {
+    "2": 9458,
+    "3": 0
+  },
+  "bytes_dropped_by_host": 0,
+  "protocol_error": false,
+  "stopped_by_keyboard_interrupt": true,
+  "usb_disconnect_detected": false,
+  "files": {
+    "gp2": "gp2.raw",
+    "gp3": "gp3.raw",
+    "sha256": "SHA256SUMS"
+  },
+  "sha256": {
+    "gp2.raw": "b99eb605263249ad92caa91488809ac679f5d2b884b45d9fda94e6f6013851bd",
+    "gp3.raw": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+  }
+}
