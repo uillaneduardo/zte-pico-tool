@@ -94,6 +94,18 @@ void printCapture(const char *label, const CaptureBuffer &capture) {
   printHex(capture);
 }
 
+bool captureStopRequested() {
+  if (!Serial.available()) return false;
+
+  int command = Serial.read();
+  if (command == 'x' || command == 'X' || command == 3) {
+    while (Serial.available()) Serial.read();
+    return true;
+  }
+
+  return false;
+}
+
 void captureOne(const char *label, SerialPIO &uart, CaptureBuffer &capture) {
   clearCapture(capture);
   flushSerial(uart);
@@ -108,14 +120,7 @@ void captureOne(const char *label, SerialPIO &uart, CaptureBuffer &capture) {
   uint32_t start = millis();
   while (millis() - start < 5000) {
     drainSerial(uart, capture);
-    if (Serial.available()) {
-      int command = Serial.peek();
-      if (command == 'x' || command == 'X') {
-        Serial.read();
-        while (Serial.available()) Serial.read();
-        break;
-      }
-    }
+    if (captureStopRequested()) break;
     tight_loop_contents();
   }
 
@@ -138,19 +143,64 @@ void captureBoth() {
   while (millis() - start < 5000) {
     drainSerial(pad2Uart, pad2Capture);
     drainSerial(pad3Uart, pad3Capture);
-    if (Serial.available()) {
-      int command = Serial.peek();
-      if (command == 'x' || command == 'X') {
-        Serial.read();
-        while (Serial.available()) Serial.read();
-        break;
-      }
-    }
+    if (captureStopRequested()) break;
     tight_loop_contents();
   }
 
   drainSerial(pad2Uart, pad2Capture);
   drainSerial(pad3Uart, pad3Capture);
+  printCapture("GP2 / ZTE pad 2", pad2Capture);
+  printCapture("GP3 / ZTE pad 3", pad3Capture);
+}
+
+void captureContinuous() {
+  clearCapture(pad2Capture);
+  clearCapture(pad3Capture);
+  flushSerial(pad2Uart);
+  flushSerial(pad3Uart);
+
+  Serial.println();
+  Serial.println("Starting CONTINUOUS passive UART capture on GP2 and GP3.");
+  Serial.println("Configuration: 115200 8N1, RX-only.");
+  Serial.println("Stop with 'x' or Ctrl-C.");
+  Serial.println("A serial EOF/disconnect also ends the capture when the USB connection is lost.");
+  Serial.println("No data is transmitted to the ZTE.");
+  Serial.println();
+
+  uint32_t lastStatus = millis();
+
+  while (true) {
+    drainSerial(pad2Uart, pad2Capture);
+    drainSerial(pad3Uart, pad3Capture);
+
+    // On USB serial terminals, EOF is normally represented by closing the
+    // connection rather than by a byte. If the USB CDC connection disappears,
+    // leave the capture loop without transmitting anything to the target.
+    if (!Serial) break;
+    if (captureStopRequested()) break;
+
+    // Do not continuously dump the captured buffer: USB output would interfere
+    // with acquisition. Print a lightweight progress line every 5 seconds.
+    if (millis() - lastStatus >= 5000) {
+      Serial.print("[capture] GP2 bytes=");
+      Serial.print(pad2Capture.count);
+      Serial.print(" dropped=");
+      Serial.print(pad2Capture.dropped);
+      Serial.print(" | GP3 bytes=");
+      Serial.print(pad3Capture.count);
+      Serial.print(" dropped=");
+      Serial.println(pad3Capture.dropped);
+      lastStatus = millis();
+    }
+
+    tight_loop_contents();
+  }
+
+  drainSerial(pad2Uart, pad2Capture);
+  drainSerial(pad3Uart, pad3Capture);
+
+  Serial.println();
+  Serial.println("=== Continuous capture stopped ===");
   printCapture("GP2 / ZTE pad 2", pad2Capture);
   printCapture("GP3 / ZTE pad 3", pad3Capture);
 }
@@ -173,6 +223,7 @@ void printHelp() {
   Serial.println("  2  capture GP2 / ZTE pad 2 for 5 seconds");
   Serial.println("  3  capture GP3 / ZTE pad 3 for 5 seconds");
   Serial.println("  b  capture GP2 and GP3 simultaneously for 5 seconds");
+  Serial.println("  c  continuous capture until x/Ctrl-C/USB EOF");
   Serial.println("  x  stop an active capture early");
   Serial.println("Wiring: pad2->GP2, pad3->GP3, pad4->GND; pad1 disconnected.");
   Serial.println("Safety: both PIO UARTs are RX-only; the Pico does not transmit to the ZTE.");
@@ -199,6 +250,7 @@ void loop() {
     case '2': captureOne("GP2 / ZTE pad 2", pad2Uart, pad2Capture); break;
     case '3': captureOne("GP3 / ZTE pad 3", pad3Uart, pad3Capture); break;
     case 'b': captureBoth(); break;
+    case 'c': captureContinuous(); break;
     case 'x': case 'X': case '\n': case '\r': break;
     default: Serial.println("Unknown command. Press ? for help."); break;
   }
