@@ -64,7 +64,9 @@ def main() -> int:
         "started_at_unix": started,
         "finished_at_unix": None,
         "trigger_seen": False,
+        "trigger_detected_at_unix": None,
         "response_sent": False,
+        "response_sent_at_unix": None,
         "rx_bytes": 0,
         "tx_bytes": 0,
         "stopped_by_keyboard_interrupt": False,
@@ -90,13 +92,16 @@ def main() -> int:
                 rx_total += len(data)
                 append_log(rx_path, data)
                 append_log(terminal_path, data)
-                rolling.extend(data)
-                if len(rolling) > len(TRIGGER):
-                    del rolling[:-len(TRIGGER)]
 
-                if not trigger_seen and TRIGGER in rolling:
+                # Search before trimming the rolling buffer. A serial read can
+                # contain hundreds of bytes, so trimming first can discard a
+                # trigger that appears in the middle of the current chunk.
+                search_buffer = rolling + data
+
+                if not trigger_seen and TRIGGER in search_buffer:
                     trigger_seen = True
                     metadata["trigger_seen"] = True
+                    metadata["trigger_detected_at_unix"] = time.time()
                     print("\n[BOOTLOADER] interaction prompt detected.")
                     print("[TX] sending ASCII '1'.")
                     ser.write(b"1")
@@ -106,7 +111,13 @@ def main() -> int:
                     tx_total += 1
                     response_sent = True
                     metadata["response_sent"] = True
+                    metadata["response_sent_at_unix"] = time.time()
                     print("[BOOTLOADER] response sent; continuing capture.")
+
+                # Keep only enough bytes to detect a trigger split across two
+                # serial reads. The full current chunk was already searched.
+                keep = max(0, len(TRIGGER) - 1)
+                rolling = bytearray(search_buffer[-keep:]) if keep else bytearray()
 
                 try:
                     print(data.decode("utf-8", errors="replace"), end="", flush=True)
