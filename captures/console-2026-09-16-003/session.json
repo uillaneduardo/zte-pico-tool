@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "device": "ZTE H3601P",
+  "firmware": "zte-pico-tool uart_console v0.1.0",
+  "transport": "usb-cdc",
+  "capture_interface": "uart",
+  "baud": 115200,
+  "data_bits": 8,
+  "parity": "N",
+  "stop_bits": 1,
+  "mode": "interactive-controlled",
+  "rx_mapping": "ZTE pad 2 -> Pico GP2",
+  "tx_mapping": "Pico GP3 -> ZTE pad 3",
+  "tx_policy": "armed-by-host",
+  "bootloader_trigger": "Press 1 means entering boot mode",
+  "automatic_response": "ASCII '1'",
+  "started_at_unix": 1789528945.53845,
+  "finished_at_unix": 1789529032.0054216,
+  "trigger_seen": true,
+  "trigger_detected_at_unix": 1789528956.7937236,
+  "response_sent": true,
+  "response_sent_at_unix": 1789528956.8063912,
+  "rx_bytes": 1668,
+  "tx_bytes": 1,
+  "stopped_by_keyboard_interrupt": false,
+  "serial_disconnect_detected": true,
+  "sha256": {
+    "rx.raw": "4e5139b18b964e6dd0049107bf4bfb396321f1891a2b7f6f4d4e28135edd45e2",
+    "tx.raw": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
+    "terminal.log": "de12caab2cf10f3c4ced81ae8b96a9da65f1572e0bbc8aea59a356ee1e54931c"
+  }
+}
