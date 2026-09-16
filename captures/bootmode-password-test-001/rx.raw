@@ -74,3 +74,186 @@ pdt_cspboot_init:917 Cspboot initialization is done.
  0 
 cspboot:1442 Entering boot mode ...
 *** Please input bootmode password: ***
+
+[TX ARMED]
+
+Boot NAND
+start read bootheader
+start read secondboot
+non secure boot 
+Jump
+
+enter bootloader...
+crpm init enter
+crpm init done
+ddr init enter, rate is 1333 Mbps
+2ddr init done 
+serial init start 
+serial init done 
+NAND
+non secure uboot 
+backup header!!
+Jump
+
+
+U-Boot 2013.04 (Mar 08 2023 - 14:33:39)
+
+CPU  : ZX279128S@A9,1000MHZ
+Board: ZTE zx279128sevb
+I2C:   ready
+1DRAM:  128 MiB
+1,8000000,48000000
+product_vid = 35
+vid=35-E1630
+input gpio:5
+input gpio:15
+input gpio:62
+input gpio:61
+input gpio:43
+input gpio:47
+input gpio:46
+input gpio:45
+output gpio:8,value:1
+output gpio:40,value:1
+output gpio:60,value:0
+input gpio:18
+input gpio:20
+output gpio:55,value:0
+output gpio:52,value:0
+output gpio:54,value:0
+output gpio:51,value:0
+output gpio:2,value:0
+bootsel=1
+NAND:  
+Manu ID: 0x98, Chip ID: 0xf1 (Toshiba NAND 128MiB 3,3V 8-bit)
+128 MiB
+<nand_read_skip_bad_,386>!mtdpart=0x1,offset=0x0,mtdpartoffset=0xc0000,mtdPartsize=0x40000,length=0x20000
+In:    serial
+Out:   serial
+Err:   serial
+clk_pll env is not setted, core clk won't change
+Net:   enter ref_clk_set.. mode = 0 .
+enter pll_cfg_fractional
+ref_clk_set success!
+gpon serdes init 
+rxpll_ready
+addr 0x9400004c before value is 38000
+addr 0x9400004c after value is 381ff
+eth0
+pdt_cspboot_init:883 Start to initialize cspboot...
+zteboot_info_default_init:1237 zboot info inited
+pdt_cspboot_info_init:862 memtop:42000000 entry:40008000
+pdt_cspboot_init:917 Cspboot initialization is done.
+*** Press 1 means entering boot mode***
+
+[TX] 0x31 '1'
+ 0 
+cspboot:1442 Entering boot mode ...
+*** Please input bootmode password: ***
+Boot4
+[TX] 0x31 '1'
+28
+=== ZTE Pico Interactive UART Console v0.1.0 ===
+UART: 115200 8N1
+RX: ZTE pad 2 -> GP2
+TX: GP3 -> ZTE pad 3
+TX state: ARMED
+Commands:
+  ?       help
+  s       status
+  a       arm TX
+  d       disarm TX
+  1       transmit ASCII '1' (only when armed)
+  x       disarm TX and stop console
+!*********
+[TX ARMED]
+
+Boot NAND
+start read bootheader
+start read secondboot
+non secure boot 
+Jump
+
+enter bootloader...
+crpm init enter
+crpm init done
+ddr init enter, rate is 1333 Mbps
+2ddr init done 
+serial init start 
+serial init done 
+NAND
+non secure uboot 
+backup header!!
+Jump
+
+
+U-Boot 2013.04 (Mar 08 2023 - 14:33:39)
+
+CPU  : ZX279128S@A9,1000MHZ
+Board: ZTE zx279128sevb
+I2C:   ready
+1DRAM:  128 MiB
+1,8000000,48000000
+product_vid = 35
+vid=35-E1630
+input gpio:5
+input gpio:15
+input gpio:62
+input gpio:61
+input gpio:43
+input gpio:47
+input gpio:46
+input gpio:45
+output gpio:8,value:1
+output gpio:40,value:1
+output gpio:60,value:0
+input gpio:18
+input gpio:20
+output gpio:55,value:0
+output gpio:52,value:0
+output gpio:54,value:0
+output gpio:51,value:0
+output gpio:2,value:0
+bootsel=1
+NAND:  
+Manu ID: 0x98, Chip ID: 0xf1 (Toshiba NAND 128MiB 3,3V 8-bit)
+128 MiB
+<nand_read_skip_bad_,386>!mtdpart=0x1,offset=0x0,mtdpartoffset=0xc0000,mtdPartsize=0x40000,length=0x20000
+In:    serial
+Out:   serial
+Err:   serial
+clk_pll env is not setted, core clk won't change
+Net:   enter ref_clk_set.. mode = 0 .
+enter pll_cfg_fractional
+ref_clk_set success!
+gpon serdes init 
+rxpll_ready
+addr 0x9400004c before value is 38000
+addr 0x9400004c after value is 381ff
+eth0
+pdt_cspboot_init:883 Start to initialize cspboot...
+zteboot_info_default_init:1237 zboot info inited
+pdt_cspboot_info_init:862 memtop:42000000 entry:40008000
+pdt_cspboot_init:917 Cspboot initialization is done.
+*** Press 1 means entering boot mode***
+
+[TX] 0x31 '1'
+ 0 
+cspboot:1442 Entering boot mode ...
+*** Please input bootmode password: ***
+Boot4
+[TX] 0x31 '1'
+28
+=== ZTE Pico Interactive UART Console v0.1.0 ===
+UART: 115200 8N1
+RX: ZTE pad 2 -> GP2
+TX: GP3 -> ZTE pad 3
+TX state: ARMED
+Commands:
+  ?       help
+  s       status
+  a       arm TX
+  d       disarm TX
+  1       transmit ASCII '1' (only when armed)
+  x       disarm TX and stop console
+!*********
