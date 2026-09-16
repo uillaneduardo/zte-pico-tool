@@ -131,6 +131,7 @@ def main() -> int:
                     rx_total += len(data)
                     append_log(rx_path, data)
                     append_log(terminal_path, data)
+                    password_buffer.extend(data)
 
                     search_buffer = rolling + data
 
