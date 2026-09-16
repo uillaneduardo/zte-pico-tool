@@ -7,3 +7,11 @@ __pycache__/
 *.py[cod]
 .venv/
 venv/
+
+# Arduino IDE / build artifacts
+**/build/
+**/.arduino/
+
+# PlatformIO
+.pio/
+.pioenvs/
