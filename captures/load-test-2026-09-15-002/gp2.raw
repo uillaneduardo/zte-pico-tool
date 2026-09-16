@@ -1,0 +1,212 @@
+
+Boot NAND
+start read bootheader
+start read secondboot
+non secure boot 
+Jump
+
+enter bootloader...
+crpm init enter
+crpm init done
+ddr init enter, rate is 1333 Mbps
+2ddr init done 
+serial init start 
+serial init done 
+NAND
+non secure uboot 
+backup header!!
+Jump
+
+
+U-Boot 2013.04 (Mar 08 2023 - 14:33:39)
+
+CPU  : ZX279128S@A9,1000MHZ
+Board: ZTE zx279128sevb
+I2C:   ready
+1DRAM:  128 MiB
+1,8000000,48000000
+product_vid = 35
+vid=35-E1630
+input gpio:5
+input gpio:15
+input gpio:62
+input gpio:61
+input gpio:43
+input gpio:47
+input gpio:46
+input gpio:45
+output gpio:8,value:1
+output gpio:40,value:1
+output gpio:60,value:0
+input gpio:18
+input gpio:20
+output gpio:55,value:0
+output gpio:52,value:0
+output gpio:54,value:0
+output gpio:51,value:0
+output gpio:2,value:0
+bootsel=1
+NAND:  
+Manu ID: 0x98, Chip ID: 0xf1 (Toshiba NAND 128MiB 3,3V 8-bit)
+128 MiB
+<nand_read_skip_bad_,386>!mtdpart=0x1,offset=0x0,mtdpartoffset=0xc0000,mtdPartsize=0x40000,length=0x20000
+In:    serial
+Out:   serial
+Err:   serial
+clk_pll env is not setted, core clk won't change
+Net:   enter ref_clk_set.. mode = 0 .
+enter pll_cfg_fractional
+ref_clk_set success!
+gpon serdes init 
+rxpll_ready
+addr 0x9400004c before value is 38000
+addr 0x9400004c after value is 381ff
+eth0
+pdt_cspboot_init:883 Start to initialize cspboot...
+zteboot_info_default_init:1237 zboot info inited
+pdt_cspboot_info_init:862 memtop:42000000 entry:40008000
+pdt_cspboot_init:917 Cspboot initialization is done.
+*** Press 1 means entering boot mode***
+ 2  1  0 
+cspboot:1463 Booting image ...... 
+zteboot_search_firmware:48 searching the whole image...
+zteboot_verify_header:334 found version
+csp_crc:103  >>csp_crc,  data addr:42000000, crc_len:0xa4
+crc=0xe7878d22, 0x187872dd
+
+zteboot_search_firmware:85 correct header has been found @19e0000
+zteboot_update_bootpara:661 search the real offset of kernel.....
+zteboot_update_bootpara:664 FwClass:0x0, ofs:0x19e0000
+zteboot_update_bootpara:665 VersionLowStartAddr:0x700000, VersionHighStartAddr:0x2000000
+zteboot_update_bootpara:666 JffsOffset:0x320214,JffsSize:0xfc0000
+zteboot_update_bootpara:683 update bootpara first firmware
+zteboot_update_bootpara:695 search the real offset of kernel.....
+zteboot_update_bootpara:698 test kernel block @[ 700000 ].....
+zteboot_update_bootpara:733 the kernel header is found FlashKernelOff=0x700000
+zteboot_update_bootpara:752 Skip Kernel: fs start:a20000 skip:0
+zteboot_update_bootpara:759 Skip bad: fs start:a20000 skip:0
+zteboot_update_bootpara:769 HeaderOffset=0x19e0000,VmlinuzOffset=700000,FsOffset=a20000 
+zteboot_update_bootpara:810 ------------------Print Image BootPara[0]---------------------
+zteboot_update_bootpara:811 BP Magic Num:cccccccc 55555555 aaaaaaaa 11111111
+zteboot_update_bootpara:813 totalImgNum=1 validImgNum=1 bootWhichImg=0 runmode=3
+zteboot_update_bootpara:814 BP->imagetype=0
+zteboot_update_bootpara:815 BP->flags=a3
+zteboot_update_bootpara:820 dwVersionStartPhyAddr=0x700000 dwHeadRealPhyAddr=0x19e0000 dwKernelStartPhyAddr=0x700000 dwFsStartPhyAddr=0xa20000
+zteboot_update_bootpara:822 dwVersionLowStartAddr:0x700000 dwVersionHighStartAddr:0x2000000
+zteboot_update_bootpara:823 ---------------------------------------------------------
+
+zteboot_update_bootpara:810 ------------------Print Image BootPara[1]---------------------
+zteboot_update_bootpara:811 BP Magic Num:cccccccc 55555555 aaaaaaaa 11111111
+zteboot_update_bootpara:813 totalImgNum=1 validImgNum=1 bootWhichImg=0 runmode=3
+zteboot_update_bootpara:814 BP->imagetype=0
+zteboot_update_bootpara:815 BP->flags=0
+zteboot_update_bootpara:820 dwVersionStartPhyAddr=0x0 dwHeadRealPhyAddr=0x0 dwKernelStartPhyAddr=0x0 dwFsStartPhyAddr=0x0
+zteboot_update_bootpara:822 dwVersionLowStartAddr:0x0 dwVersionHighStartAddr:0x0
+zteboot_update_bootpara:823 ---------------------------------------------------------
+
+zteboot_verify_header:334 found version
+csp_crc:103  >>csp_crc,  data addr:42000000, crc_len:0xa4
+crc=0xe7878d22, 0x187872dd
+
+zteboot_search_firmware:85 correct header has been found @32e0000
+zteboot_update_bootpara:661 search the real offset of kernel.....
+zteboot_update_bootpara:664 FwClass:0x0, ofs:0x32e0000
+zteboot_update_bootpara:665 VersionLowStartAddr:0x700000, VersionHighStartAddr:0x2000000
+zteboot_update_bootpara:666 JffsOffset:0x320214,JffsSize:0xfc0000
+zteboot_update_bootpara:690 update bootpara second firmware
+zteboot_update_bootpara:695 search the real offset of kernel.....
+zteboot_update_bootpara:698 test kernel block @[ 2000000 ].....
+zteboot_update_bootpara:733 the kernel header is found FlashKernelOff=0x2000000
+zteboot_update_bootpara:752 Skip Kernel: fs start:2320000 skip:0
+zteboot_update_bootpara:759 Skip bad: fs start:2320000 skip:0
+zteboot_update_bootpara:769 HeaderOffset=0x32e0000,VmlinuzOffset=2000000,FsOffset=2320000 
+zteboot_update_bootpara:810 ------------------Print Image BootPara[0]---------------------
+zteboot_update_bootpara:811 BP Magic Num:cccccccc 55555555 aaaaaaaa 11111111
+zteboot_update_bootpara:813 totalImgNum=2 validImgNum=2 bootWhichImg=0 runmode=3
+zteboot_update_bootpara:814 BP->imagetype=0
+zteboot_update_bootpara:815 BP->flags=a3
+zteboot_update_bootpara:820 dwVersionStartPhyAddr=0x700000 dwHeadRealPhyAddr=0x19e0000 dwKernelStartPhyAddr=0x700000 dwFsStartPhyAddr=0xa20000
+zteboot_update_bootpara:822 dwVersionLowStartAddr:0x700000 dwVersionHighStartAddr:0x2000000
+zteboot_update_bootpara:823 ---------------------------------------------------------
+
+zteboot_update_bootpara:810 ------------------Print Image BootPara[1]---------------------
+zteboot_update_bootpara:811 BP Magic Num:cccccccc 55555555 aaaaaaaa 11111111
+zteboot_update_bootpara:813 totalImgNum=2 validImgNum=2 bootWhichImg=0 runmode=3
+zteboot_update_bootpara:814 BP->imagetype=0
+zteboot_update_bootpara:815 BP->flags=a3
+zteboot_update_bootpara:820 dwVersionStartPhyAddr=0x2000000 dwHeadRealPhyAddr=0x32e0000 dwKernelStartPhyAddr=0x2000000 dwFsStartPhyAddr=0x2320000
+zteboot_update_bootpara:822 dwVersionLowStartAddr:0x700000 dwVersionHighStartAddr:0x2000000
+zteboot_update_bootpara:823 ---------------------------------------------------------
+
+zteboot_search_firmware:91 now we have found two headers. so  stop searching! ofs=0x32e0000
+zteboot_save_bootpara:841 ##save bootpara @0x40007000 size=0x554 sum=0x0000f625
+zteboot_select_pdtver:253 Select firmware
+csp_crc:103  >>csp_crc,  data addr:47532ee8, crc_len:0xa4
+crc=0xe7878d22, 0x187872dd
+
+csp_crc:103  >>csp_crc,  data addr:47532ee8, crc_len:0xa4
+crc=0xe7878d22, 0x187872dd
+
+pdt_getimgindex:164 pdt_getimgindex skip bab block @0x6000000
+pdt_getimgindex:230 pdt_getimg select = 0, serial0=0x3, serial1=0x3,
+zteboot_select_pdtver:325 pdt_getimg select = 0, serial0=0x3, serial1=0x3,
+zteboot_save_bootpara:841 ##save bootpara @0x40007000 size=0x554 sum=0x0000f625
+pdt_getreal_kernelfs:461 pdt_start_kernel [0]firmware kernle@700000[ 31fdcc ] fs@ a20000[ fc0000 ] header:19e0000
+pdt_getreal_kernelfs:478 search the real offset of kernel.....
+pdt_getreal_kernelfs:482 test kernel block @[ 700000 ].....
+pdt_getreal_kernelfs:534 verify_kernel readflash @0x700000 size:0x320000 at ram:0x42020020
+csp_crc:103  >>csp_crc,  data addr:42020020, crc_len:0x31fdcc
+crc=0x198575d7, 0xe67a8a28
+
+zteboot_verify_kernel:175 verify kernel success!!
+pdt_getreal_kernelfs:570 check fs: start:a20000 skip:0
+pdt_getreal_kernelfs:574 found fs: flashstart:a20000 rsize:fc0000
+csp_crc:103  >>csp_crc,  data addr:42360000, crc_len:0xfc0000
+crc=0x709215c, 0xf8f6dea3
+
+zteboot_verify_fs:205 zteboot_verify_fs romfs = 0x42360000,len = 0xfc0000
+zteboot_verify_fs:237 use defualt jffs2 fs!!
+zteboot_verify_fs:242 verify fs success!!
+zteboot_save_bootpara:841 ##save bootpara @0x40007000 size=0x554 sum=0x0000f63a
+pdt_start_kernel:747 
+ Total found 2 firmwares(valid:2), start from ver 0 :
+pdt_start_kernel:749 
++-----+------------+------------+------------+
+pdt_start_kernel:751 
+| Seq |   Kernel   |    Romfs   |   Header   |
+pdt_start_kernel:754 
++-----+------------+------------+------------+
+pdt_start_kernel:760 
+|  0  | 0x00700000 | 0x00a20000 | 0x019e0000 | 
+pdt_start_kernel:754 
++-----+------------+------------+------------+
+pdt_start_kernel:760 
+|  1  | 0x02000000 | 0x02320000 | 0x032e0000 | 
+pdt_start_kernel:763 
++-----+------------+------------+------------+
+
+zteboot_do_settings:467 >>zteboot_do_settings
+zteboot_do_settings:490 >>s=128M, select=0
+zteboot_do_settings:567 >>s=setenv bootargs console=$(console) root=/dev/mtdblock8 ro rootfstype=jffs2  mem=$(memsize);, select=0
+setting versioninfo...
+(CONFIG_SYS_LOAD_ADDR  + SZ_16M) =0x43000000
+<nand_read_skip_bad_,386>!mtdpart=0x0,offset=0x0,mtdpartoffset=0x0,mtdPartsize=0xc0000,length=0xa0000
+lseek=0x43086800
+cmdline=U-Boot V1.0.0 20230308144405 
+arg=bootm 0x42020020;
+cmd=setenv bootargs console=$(console) root=/dev/mtdblock8 ro rootfstype=jffs2  mem=$(memsize);
+## Booting kernel from Legacy Image at 42020020 ...
+   Image Name:   Linux Kernel Image
+   Image Type:   ARM Linux Kernel Image (uncompressed)
+   Data Size:    3173406 Bytes = 3 MiB
+   Load Address: 40008000
+   Entry Point:  40008000
+   Verifying Checksum ... OK
+   Loading Kernel Image ... OK
+OK
+----------------------
+|-->setup versioninfo tag...
+
+Starting kernel ...
+
+																																																																				
