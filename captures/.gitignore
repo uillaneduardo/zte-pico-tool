@@ -2,3 +2,7 @@
 *
 !.gitignore
 !.gitkeep
+
+# Temporary exception for the 2026-09-15 load-test capture.
+!load-test-2026-09-15/
+!load-test-2026-09-15/*
