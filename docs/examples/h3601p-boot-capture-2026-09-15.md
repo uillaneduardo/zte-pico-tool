@@ -1,10 +1,12 @@
-# Exemplo de captura de boot — ZTE H3601P — 2026-09-15
+# Resultado do teste — ZTE H3601P — 2026-09-15
 
 ## Contexto
 
-Esta captura registra o estado observado no console UART do H3601P durante uma inicialização real do equipamento. O objetivo foi validar a hipótese de UART passiva e preservar uma evidência reproduzível antes de avançar para qualquer implementação de acesso ao bootloader ou à memória NAND.
+Esta captura registra o comportamento observado no console UART do H3601P durante uma inicialização real do equipamento. O objetivo foi validar a hipótese de UART passiva, preservar uma evidência reproduzível e compreender o estado do roteador antes de avançar para qualquer implementação de interação com o bootloader ou acesso à memória NAND.
 
 A aquisição foi feita com o Raspberry Pi Pico utilizando o firmware `uart_capture v0.4.0`, em modo RX-only, a 115200 8N1.
+
+O teste **não é um teste artificial de carga de uma hora**. A investigação está priorizando o comportamento real do equipamento durante o boot e a preservação dos dados efetivamente produzidos pelo roteador.
 
 ## Configuração
 
@@ -44,11 +46,11 @@ e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  gp3.raw
 
 Os mesmos hashes foram registrados no `metadata.json` e no arquivo `SHA256SUMS` da captura.
 
-## O que a captura mostra
+## Comportamento observado do roteador
 
 A saída registrada em GP2 não é ruído aleatório. Ela forma uma sequência coerente de mensagens de inicialização de baixo nível e permite acompanhar várias etapas do boot.
 
-### 1. Inicialização da memória NAND e entrada no bootloader
+### 1. Inicialização da NAND e entrada no bootloader
 
 O equipamento inicia com mensagens como:
 
@@ -60,7 +62,7 @@ crpm init
 
 Em seguida aparecem informações de inicialização da DDR e da interface serial.
 
-Isso indica que o sinal observado no pad 2 está carregando a saída de diagnóstico do processo inicial de boot, e não apenas tráfego de uma aplicação já iniciada.
+Isso demonstra que o sinal observado no pad 2 está carregando a saída de diagnóstico do processo inicial de boot, e não apenas tráfego de uma aplicação já iniciada.
 
 ### 2. Identificação do SoC e da placa
 
@@ -84,7 +86,9 @@ NAND: Manu ID: 0x98, Chip ID: 0xf1
 (Toshiba NAND 128MiB 3,3V 8-bit)
 ```
 
-Isso é especialmente importante para a próxima fase. O console já fornece fabricante, identificador, capacidade reportada e largura do barramento. Ainda assim, isso não substitui a identificação física do chip na placa nem autoriza conexão direta do Pico à NAND.
+O console fornece fabricante, identificador, capacidade reportada e largura do barramento. Isso é uma pista importante para a próxima fase, mas não substitui a identificação física do componente.
+
+Ainda não é seguro conectar o Pico diretamente à NAND. Antes disso será necessário identificar fisicamente o chip, confirmar tensão e considerar a possibilidade de contenção do barramento pelo SoC.
 
 ### 4. Estrutura de firmware encontrada
 
@@ -110,7 +114,9 @@ O próprio bootloader informa:
 totalImgNum=2 validImgNum=2 bootWhichImg=0 runmode=3
 ```
 
-Portanto, no boot observado, existem duas imagens consideradas válidas pelo mecanismo de seleção, e a imagem selecionada é a de índice `0`.
+Portanto, na inicialização observada, existem duas imagens consideradas válidas pelo mecanismo de seleção e a imagem selecionada é a de índice `0`.
+
+Isso não permite concluir ainda se a segunda imagem é um backup, um slot alternativo de atualização ou outra estrutura de firmware. Essa distinção exigirá análise posterior dos cabeçalhos e dos dados.
 
 ### 5. Verificação de integridade da imagem selecionada
 
@@ -120,9 +126,9 @@ A captura registra uma verificação do kernel em `0x700000`, com tamanho `0x320
 
 Isso mostra que, no momento da captura, o bootloader conseguiu localizar e validar os componentes necessários da imagem selecionada.
 
-### 6. Inicialização de rede/GPON antes da seleção final
+### 6. Inicialização de rede/GPON
 
-Também aparecem mensagens relacionadas a inicialização de rede, `eth0` e GPON. Isso demonstra que parte da inicialização do hardware de comunicação ocorre ainda durante o fluxo observado no bootloader.
+Também aparecem mensagens relacionadas à inicialização de rede, `eth0` e GPON. Isso demonstra que parte da inicialização do hardware de comunicação ocorre ainda durante o fluxo observado antes da transferência de controle para o kernel.
 
 ### 7. Possibilidade de entrada em modo de boot
 
@@ -140,7 +146,7 @@ Depois ocorre uma contagem regressiva:
 0
 ```
 
-Como a captura é passiva, não houve envio de `1` pelo Pico. Portanto, o projeto ainda não testou se a interrupção desse fluxo permite acessar comandos interativos do bootloader.
+Como a captura é passiva, não houve envio de `1` pelo Pico. Portanto, o projeto ainda não testou se a interrupção dessa janela permite acessar comandos interativos do bootloader.
 
 ### 8. Transferência do controle para o kernel
 
@@ -152,23 +158,66 @@ Starting kernel ...
 
 Isso indica que o bootloader terminou a etapa observada e entregou o fluxo para o kernel.
 
-A captura, entretanto, não deve ser interpretada como uma descrição completa do comportamento do Linux posteriormente, porque o arquivo disponível termina nesse ponto.
+A captura não deve ser interpretada como uma descrição completa do comportamento do Linux posteriormente, porque o arquivo disponível termina nesse ponto.
 
 ## Estado atual inferido do equipamento
 
-Com base somente nesta captura, podemos afirmar com segurança que:
+Com base somente nesta captura, o estado observado pode ser resumido como:
 
-1. O H3601P possui um console UART ativo no sinal ligado ao pad 2/GP2.
-2. O formato 115200 8N1 produz uma saída textual coerente e repetível durante o boot.
-3. O bootloader é U-Boot 2013.04 nesta unidade.
+```text
+Power-on
+   │
+   ▼
+Boot NAND
+   │
+   ▼
+Bootloader / U-Boot
+   │
+   ├── Inicializa DDR
+   ├── Inicializa serial
+   ├── Inicializa hardware
+   ├── Identifica NAND
+   ├── Inicializa partes de rede/GPON
+   │
+   ▼
+Procura imagens
+   │
+   ├── Imagem 0 → válida
+   └── Imagem 1 → válida
+   │
+   ▼
+Seleciona imagem 0
+   │
+   ├── Verifica kernel → sucesso
+   ├── Verifica JFFS2 → sucesso
+   │
+   ▼
+Carrega kernel
+   │
+   ▼
+Starting kernel ...
+```
+
+Assim, a evidência disponível indica que o equipamento está conseguindo executar seu fluxo normal de bootloader, identificar a NAND, encontrar duas imagens válidas, selecionar a imagem `0`, validar kernel e filesystem e transferir a execução para o kernel.
+
+Não há, nessa captura, evidência de que o equipamento esteja parado no bootloader ou que a imagem selecionada tenha falhado nas verificações registradas.
+
+## Evidências importantes para o projeto
+
+Com base nesta captura, podemos registrar como resultados do teste:
+
+1. O H3601P possui uma saída de console UART ativa no sinal ligado ao pad 2/GP2.
+2. A configuração 115200 8N1 produz uma saída textual coerente durante o boot.
+3. O bootloader reportado é U-Boot 2013.04 nesta unidade.
 4. O SoC reportado é ZX279128S a 1 GHz.
 5. A RAM reportada é 128 MiB.
 6. O bootloader identifica uma NAND Toshiba de 128 MiB, 3,3 V e barramento de 8 bits, com IDs `0x98/0xf1`.
 7. Existem duas imagens de firmware consideradas válidas pelo mecanismo de boot.
 8. A imagem `0` foi selecionada nessa inicialização.
-9. O kernel e o filesystem JFFS2 da imagem selecionada passaram pelas verificações registradas no console.
-10. O processo chegou à etapa `Starting kernel ...`.
-11. O pad 3/GP3 não produziu bytes UART úteis nessa captura.
+9. O kernel da imagem selecionada passou pela verificação registrada.
+10. O filesystem JFFS2 da imagem selecionada passou pela verificação registrada.
+11. O processo chegou à etapa `Starting kernel ...`.
+12. O pad 3/GP3 não produziu bytes UART úteis nessa captura.
 
 ## O que ainda não podemos concluir
 
@@ -183,15 +232,19 @@ A captura não prova, sozinha:
 - que é seguro ligar o Pico diretamente aos sinais da NAND;
 - que existe uma forma de obter um dump completo da flash pela UART.
 
-## Interpretação para a próxima etapa
+## Decisão sobre teste de carga
 
-A investigação já ultrapassou a fase de simplesmente procurar atividade elétrica: existe uma saída UART coerente e rica em informações de boot.
+Não será executado um teste artificial de carga de uma hora nesta etapa.
 
-Por isso, **não será executado um teste artificial de carga de uma hora**. A aquisição atual já está sendo usada para observar o comportamento real do roteador. O próximo teste deve aproveitar o próprio fluxo natural de inicialização e melhorar a confiabilidade do transporte de captura.
+A razão é metodológica: o objetivo atual é investigar o comportamento real do H3601P, e não produzir uma carga artificial de UART sem relação com o comportamento observado. A captura já contém o fluxo real de inicialização do equipamento e, portanto, possui maior valor para a investigação atual.
 
-A v0.5.0 passa a usar frames de até 256 bytes com número de sequência por canal. Isso permite verificar se o transporte USB/Pico perdeu frames sem precisar manter o roteador transmitindo artificialmente por longos períodos.
+A validação do transporte será feita durante novas inicializações reais do roteador.
 
-A prioridade seguinte é repetir um boot real com a v0.5.0 e verificar:
+## Próxima validação — v0.5.0
+
+A v0.5.0 altera o protocolo de transporte para utilizar frames de até 256 bytes com número de sequência por canal. Isso permite detectar perdas de frames no caminho Pico → USB → host sem exigir que o roteador permaneça transmitindo artificialmente durante longos períodos.
+
+O próximo teste deve repetir um boot real com a v0.5.0 e verificar:
 
 - `frames_missing = 0`;
 - `protocol_error = false`;
@@ -199,4 +252,4 @@ A prioridade seguinte é repetir um boot real com a v0.5.0 e verificar:
 - conteúdo GP2 coerente com a captura v0.4.0;
 - GP3 permanecendo vazio, caso o comportamento físico não tenha mudado.
 
-Somente depois dessa validação faz sentido estudar de forma controlada a interação com o bootloader, mantendo o princípio de não transmissão como padrão até que a interface e os comandos sejam documentados.
+Somente depois dessa validação será estudada, de forma controlada, a possibilidade de interação com o bootloader. Até lá, o princípio permanece: **o Pico apenas observa e não transmite ao ZTE**.
