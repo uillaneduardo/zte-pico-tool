@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Store a framed passive UART stream from zte-pico-tool on the host."""
+"""Store a sequenced passive UART stream from zte-pico-tool on the host."""
 
 from __future__ import annotations
 
@@ -16,7 +16,9 @@ except ImportError as exc:
     raise SystemExit("pyserial is required: python -m pip install pyserial") from exc
 
 MAGIC = b"ZTE1"
-HEADER_SIZE = 7  # magic(4) + channel(1) + length(2)
+HEADER_SIZE = 11  # magic(4) + channel(1) + sequence(4) + length(2)
+PROTOCOL_MARKER = b"ZTE-CAPTURE-V2\r\n"
+MAX_PAYLOAD = 256
 
 
 def utc_now() -> str:
@@ -33,14 +35,14 @@ def sha256_file(path: Path) -> str:
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Capture framed passive UART bytes from the zte-pico-tool Pico."
+        description="Capture sequenced passive UART bytes from the zte-pico-tool Pico."
     )
     parser.add_argument("port", help="Serial port, e.g. COM5 or /dev/ttyACM0")
     parser.add_argument("--output", type=Path, required=True, help="Capture directory")
     parser.add_argument("--baud", type=int, default=115200, help="USB CDC baud setting (default: 115200)")
     parser.add_argument("--device", default="ZTE H3601P", help="Target device label")
     parser.add_argument("--hardware-revision", default="unknown")
-    parser.add_argument("--firmware", default="zte-pico-tool uart_capture v0.4.0")
+    parser.add_argument("--firmware", default="zte-pico-tool uart_capture v0.5.0")
     parser.add_argument("--timeout", type=float, default=0.2)
     return parser
 
@@ -59,6 +61,15 @@ def find_magic(buffer: bytearray) -> bool:
     return True
 
 
+def read_uint32_le(data: bytearray, offset: int) -> int:
+    return (
+        data[offset]
+        | (data[offset + 1] << 8)
+        | (data[offset + 2] << 16)
+        | (data[offset + 3] << 24)
+    )
+
+
 def main() -> int:
     args = build_parser().parse_args()
     output_dir = args.output
@@ -72,10 +83,13 @@ def main() -> int:
     started_at = utc_now()
     bytes_by_channel = {2: 0, 3: 0}
     frames = 0
+    frames_missing = {2: 0, 3: 0}
+    protocol_error = False
     interrupted = False
     disconnected = False
-    protocol_error = False
     buffer = bytearray()
+    expected_sequence = {2: 0, 3: 0}
+    sequence_seen = {2: False, 3: False}
 
     print(f"Opening {args.port}...")
     print(f"Capture directory: {output_dir}")
@@ -105,15 +119,14 @@ def main() -> int:
                 buffer.extend(chunk)
 
                 if not started_stream:
-                    marker = b"ZTE-CAPTURE-V1\r\n"
-                    marker_pos = buffer.find(marker)
+                    marker_pos = buffer.find(PROTOCOL_MARKER)
                     if marker_pos < 0:
                         if len(buffer) > 256:
                             del buffer[:-32]
                         continue
-                    del buffer[:marker_pos + len(marker)]
+                    del buffer[:marker_pos + len(PROTOCOL_MARKER)]
                     started_stream = True
-                    print("Capture stream started.")
+                    print("Capture stream started (ZTE-CAPTURE-V2).")
 
                 while len(buffer) >= HEADER_SIZE:
                     if not find_magic(buffer):
@@ -122,8 +135,10 @@ def main() -> int:
                         break
 
                     channel = buffer[4]
-                    length = buffer[5] | (buffer[6] << 8)
-                    if channel not in (2, 3) or length > 256:
+                    sequence = read_uint32_le(buffer, 5)
+                    length = buffer[9] | (buffer[10] << 8)
+
+                    if channel not in (2, 3) or length > MAX_PAYLOAD:
                         del buffer[0]
                         protocol_error = True
                         continue
@@ -132,6 +147,16 @@ def main() -> int:
 
                     payload = bytes(buffer[HEADER_SIZE:HEADER_SIZE + length])
                     del buffer[:HEADER_SIZE + length]
+
+                    if sequence_seen[channel]:
+                        expected = expected_sequence[channel]
+                        if sequence != expected:
+                            if sequence > expected:
+                                frames_missing[channel] += sequence - expected
+                            else:
+                                protocol_error = True
+                    sequence_seen[channel] = True
+                    expected_sequence[channel] = sequence + 1
 
                     if channel == 2:
                         gp2.write(payload)
@@ -145,7 +170,8 @@ def main() -> int:
                     total = bytes_by_channel[2] + bytes_by_channel[3]
                     print(
                         f"\r[capture] frames={frames} GP2={bytes_by_channel[2]} "
-                        f"GP3={bytes_by_channel[3]} total={total}",
+                        f"GP3={bytes_by_channel[3]} total={total} "
+                        f"missing=GP2:{frames_missing[2]} GP3:{frames_missing[3]}",
                         end="",
                         flush=True,
                     )
@@ -164,7 +190,7 @@ def main() -> int:
     }
 
     metadata = {
-        "schema_version": 1,
+        "schema_version": 2,
         "device": args.device,
         "hardware_revision": args.hardware_revision,
         "firmware": args.firmware,
@@ -175,10 +201,11 @@ def main() -> int:
         "parity": "N",
         "stop_bits": 1,
         "mode": "passive-continuous-stream",
-        "protocol": "ZTE-CAPTURE-V1",
+        "protocol": "ZTE-CAPTURE-V2",
         "started_at_utc": started_at,
         "finished_at_utc": finished_at,
         "frames_received": frames,
+        "frames_missing": frames_missing,
         "bytes_received": bytes_by_channel,
         "bytes_dropped_by_host": 0,
         "protocol_error": protocol_error,
@@ -199,6 +226,7 @@ def main() -> int:
     )
 
     print(f"\nCapture finalized: GP2={bytes_by_channel[2]} bytes, GP3={bytes_by_channel[3]} bytes")
+    print(f"Missing frames: GP2={frames_missing[2]}, GP3={frames_missing[3]}")
     print(f"Metadata: {metadata_path}")
     print(f"Checksums: {sums_path}")
     return 0
