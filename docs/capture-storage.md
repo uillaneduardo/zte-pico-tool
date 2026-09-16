@@ -4,7 +4,7 @@
 
 A partir da `v0.4.0`, o Raspberry Pi Pico deixa de acumular a captura inteira na RAM. Ele atua como dispositivo de aquisição e envia continuamente os bytes decodificados para o computador por USB CDC.
 
-O computador é responsável por armazenamento, metadados e SHA-256.
+Na `v0.5.0`, o transporte passa a usar frames de até 256 bytes com sequência por canal. O computador continua responsável por armazenamento, metadados, validação da sequência e SHA-256.
 
 ## Fluxo
 
@@ -13,10 +13,10 @@ ZTE H3601P
     │
     │ UART 115200 8N1
     ▼
-Pico / SerialPIO
+Pico / SerialPIO RX-only
     │
     │ USB CDC
-    │ ZTE-CAPTURE-V1
+    │ ZTE-CAPTURE-V2
     ▼
 host/python/capture.py
     │
@@ -33,17 +33,19 @@ O comando `c` inicia o modo de captura contínua.
 O Pico envia primeiro o marcador ASCII:
 
 ```text
-ZTE-CAPTURE-V1\r\n
+ZTE-CAPTURE-V2\r\n
 ```
 
-Depois disso, os dados são enviados em quadros binários:
+Depois disso, os dados são enviados em frames binários:
 
 ```text
-+----------+---------+----------+----------------+
-| Magic    | Channel | Length   | Payload        |
-| 4 bytes  | 1 byte  | 2 bytes  | 0..256 bytes   |
-+----------+---------+----------+----------------+
++----------+---------+------------+----------+----------------+
+| Magic    | Channel | Sequence   | Length   | Payload        |
+| 4 bytes  | 1 byte  | 4 bytes    | 2 bytes  | 0..256 bytes   |
++----------+---------+------------+----------+----------------+
 ```
+
+A especificação detalhada está em `docs/protocol-v2.md`.
 
 ### Magic
 
@@ -64,27 +66,27 @@ ZTE1
 3 = GP3 / ZTE pad 3
 ```
 
+### Sequence
+
+Contador independente por canal, iniciado em zero em cada captura.
+
+O host compara cada número recebido com o próximo esperado. Lacunas são registradas em `frames_missing`.
+
 ### Length
 
-Inteiro sem sinal de 16 bits, little-endian, indicando o tamanho do payload.
-
-Na implementação atual o tamanho máximo é 256 bytes por quadro.
+Inteiro sem sinal de 16 bits, little-endian, indicando o tamanho do payload. A implementação limita o payload a 256 bytes.
 
 ### Payload
 
 São os bytes UART já decodificados pelo `SerialPIO`. O host grava o payload sem conversão de texto.
 
-## Por que usar quadros?
+## Por que usar frames?
 
-O USB CDC também transporta os comandos e mensagens do firmware. Um protocolo enquadrado permite separar mensagens de controle dos bytes de aquisição.
+O enquadramento permite separar os bytes de aquisição do protocolo de controle e identificar a origem de cada bloco.
 
-Além disso, o host consegue detectar:
+O número de sequência acrescenta uma propriedade importante: o host consegue detectar lacunas no fluxo de frames.
 
-- canal de origem;
-- tamanho do quadro;
-- corrupção ou desalinhamento do fluxo;
-- perda de sincronização;
-- fim da captura por desconexão USB.
+Isso não prova ausência de overflow no buffer interno do UART/PIO. Por isso, uma captura sem lacunas deve ser descrita como **nenhuma perda de frames detectada**, e não como prova absoluta de perda zero de bytes.
 
 ## Estrutura de uma aquisição
 
@@ -111,7 +113,8 @@ Os `.raw` são arquivos binários e devem ser tratados como a fonte primária da
 - configuração UART;
 - protocolo de captura;
 - horários UTC;
-- quantidade de quadros;
+- quantidade de frames;
+- quantidade de frames ausentes detectados por canal;
 - quantidade de bytes por canal;
 - erros de protocolo;
 - desconexão USB;
@@ -138,21 +141,33 @@ python -m pip install -r host/python/requirements.txt
 Inicie uma captura:
 
 ```bash
-python host/python/capture.py COM5 --output captures/2026-09-15-h3601p-boot
+python host/python/capture.py COM3 --output captures/2026-09-15-h3601p-boot-v05
 ```
 
 Linux:
 
 ```bash
-python3 host/python/capture.py /dev/ttyACM0 --output captures/2026-09-15-h3601p-boot
+python3 host/python/capture.py /dev/ttyACM0 --output captures/2026-09-15-h3601p-boot-v05
 ```
 
 Interrompa com `Ctrl-C`. A conexão USB será encerrada e o host finalizará os metadados e hashes.
 
+## Estratégia de validação
+
+Não é necessário manter o roteador transmitindo por uma hora apenas para gerar carga artificial. O objetivo da investigação é observar o comportamento real do H3601P durante o boot e preservar essa saída.
+
+A validação da `v0.5.0` deve usar um ou mais boots reais do equipamento e verificar:
+
+- `frames_missing` igual a zero;
+- `protocol_error` igual a `false`;
+- hashes válidos;
+- conteúdo GP2 coerente com a captura anterior;
+- comportamento de GP3 coerente com as medições anteriores.
+
+Um teste longo poderá ser necessário futuramente se houver evidência de perda sob operação contínua, mas não é requisito para avançar nesta fase.
+
 ## Limitação conhecida
 
-A `v0.4.0` melhora o armazenamento, mas ainda não implementa controle de fluxo USB dedicado. O próximo passo é medir o comportamento em capturas longas e verificar se o host consegue consumir o fluxo continuamente sem perda.
+A sequência detecta perdas de frames entre a geração do frame e o parser do host, mas não cobre todos os possíveis casos de overflow no buffer interno do `SerialPIO`.
 
-Por isso, a presença de `bytes_dropped_by_host: 0` significa apenas que o software host não descartou bytes deliberadamente; não constitui prova de que a transmissão física não perdeu dados antes de chegar ao host.
-
-A validação dessa propriedade será feita com testes de carga e, posteriormente, com contadores de sequência/frames no protocolo.
+A captura `v0.4.0` permanece como evidência histórica. Ela usava `ZTE-CAPTURE-V1` e não deve ser convertida retroativamente para o formato v2.
