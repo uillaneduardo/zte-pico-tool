@@ -44,6 +44,35 @@ def append_log(path: Path, data: bytes) -> None:
         f.write(data)
 
 
+def send_bytes(ser, tx_path: Path, terminal_path: Path, payload: bytes) -> None:
+    ser.write(payload)
+    ser.flush()
+    append_log(tx_path, payload)
+    append_log(terminal_path, b"\n[HOST TX RAW] " + payload + b"\n")
+
+
+def send_password(
+    ser,
+    tx_path: Path,
+    terminal_path: Path,
+    candidate: str,
+    attempt_no: int,
+) -> int:
+    payload = candidate.encode("ascii") + b"\r"
+    ser.write(payload)
+    ser.flush()
+    append_log(tx_path, payload)
+    append_log(
+        terminal_path,
+        b"\n[HOST TX] password attempt "
+        + str(attempt_no).encode("ascii")
+        + b": "
+        + candidate.encode("ascii")
+        + b"\\r\n",
+    )
+    return len(payload)
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Interactive ZTE H3601P UART console with controlled bootmode password testing."
@@ -52,10 +81,18 @@ def main() -> int:
     parser.add_argument("--output", required=True, help="Output session directory")
     parser.add_argument("--baud", type=int, default=115200)
     parser.add_argument("--timeout", type=float, default=0.1)
-    parser.add_argument("--prompt-timeout", type=float, default=8.0,
-                        help="Seconds to wait for the next bootmode password prompt")
-    parser.add_argument("--delay", type=float, default=1.5,
-                        help="Seconds to wait after each password submission")
+    parser.add_argument(
+        "--prompt-timeout",
+        type=float,
+        default=8.0,
+        help="Seconds to wait for a response after each password submission",
+    )
+    parser.add_argument(
+        "--delay",
+        type=float,
+        default=1.5,
+        help="Minimum seconds to wait before accepting a repeated password prompt",
+    )
     args = parser.parse_args()
 
     out = Path(args.output)
@@ -72,16 +109,17 @@ def main() -> int:
     rx_total = 0
     tx_total = 0
     rolling = bytearray()
-    password_buffer = bytearray()
-    post_password_buffer = bytearray()
+    prompt_buffer = bytearray()
+    attempt_buffer = bytearray()
     password_index = 0
     attempts = []
-    waiting_for_prompt = False
-    prompt_deadline = None
+    state = "WAIT_TRIGGER"
+    response_deadline = None
+    last_password_sent_at = None
     stop_reason = None
 
     metadata = {
-        "schema_version": 3,
+        "schema_version": 4,
         "device": "ZTE H3601P",
         "firmware": "zte-pico-tool uart_console v0.2.0",
         "transport": "usb-cdc",
@@ -115,6 +153,8 @@ def main() -> int:
     }
 
     with serial.Serial(args.port, args.baud, timeout=args.timeout) as ser:
+        # The console firmware starts TX blocked. Arm it explicitly before
+        # the automatic bootloader response is sent.
         ser.write(b"a")
         ser.flush()
 
@@ -131,55 +171,33 @@ def main() -> int:
                     rx_total += len(data)
                     append_log(rx_path, data)
                     append_log(terminal_path, data)
-                    password_buffer.extend(data)
 
                     search_buffer = rolling + data
 
-                    if not trigger_seen and TRIGGER in search_buffer:
-                        trigger_seen = True
-                        metadata["trigger_seen"] = True
-                        metadata["trigger_detected_at_unix"] = time.time()
-                        print("\n[BOOTLOADER] interaction prompt detected.")
-                        print("[TX] sending ASCII '1'.")
-                        ser.write(b"1")
-                        ser.flush()
-                        append_log(tx_path, b"1")
-                        append_log(terminal_path, b"\n[HOST TX] 1\n")
-                        tx_total += 1
-                        response_sent = True
-                        metadata["response_sent"] = True
-                        metadata["response_sent_at_unix"] = time.time()
-                        post_password_buffer.clear()
-                        print("[BOOTLOADER] response sent; waiting for password prompt.")
+                    if state == "WAIT_TRIGGER":
+                        if TRIGGER in search_buffer:
+                            trigger_seen = True
+                            metadata["trigger_seen"] = True
+                            metadata["trigger_detected_at_unix"] = time.time()
+                            print("\n[BOOTLOADER] interaction prompt detected.")
+                            print("[TX] sending ASCII '1' as bootmode trigger response.")
 
-                    if PASSWORD_PROMPT in password_buffer:
-                        password_prompt_seen = True
-                        metadata["password_prompt_seen"] = True
-                        password_buffer.clear()
+                            send_bytes(ser, tx_path, terminal_path, b"1")
+                            tx_total += 1
+                            response_sent = True
+                            metadata["response_sent"] = True
+                            metadata["response_sent_at_unix"] = time.time()
+                            state = "WAIT_PASSWORD_PROMPT"
+                            prompt_buffer.clear()
+                            print("[BOOTLOADER] '1' sent; waiting for password prompt.")
 
-                    # Only evaluate password-related success/failure output after
-                    # a candidate has actually been submitted. This prevents the
-                    # pre-password 'cspboot:' bootloader log from being treated as
-                    # a successful bootmode transition.
-                    if waiting_for_prompt:
-                        post_password_buffer.extend(data)
+                    if state == "WAIT_PASSWORD_PROMPT":
+                        prompt_buffer.extend(data)
 
-                        lower = post_password_buffer.lower()
-                        if any(marker.lower() in lower for marker in SUCCESS_MARKERS):
-                            if attempts:
-                                attempts[-1]["response_observed"] = "success-marker"
-                            stop_reason = "success-marker-detected"
-                            print("\n[BOOTMODE] possible success marker detected; stopping.")
-                            break
-
-                        if PASSWORD_PROMPT in post_password_buffer:
-                            if attempts:
-                                attempts[-1]["response_observed"] = "next-password-prompt"
-
-                            post_password_buffer.clear()
-                            password_buffer.clear()
-                            waiting_for_prompt = False
-                            prompt_deadline = None
+                        if PASSWORD_PROMPT in prompt_buffer:
+                            password_prompt_seen = True
+                            metadata["password_prompt_seen"] = True
+                            prompt_buffer.clear()
 
                             if password_index >= len(PASSWORDS):
                                 stop_reason = "password-list-exhausted"
@@ -190,61 +208,93 @@ def main() -> int:
                             password_index += 1
                             attempt_no = password_index
 
-                            print(f"\n[BOOTMODE] password prompt detected; attempt {attempt_no}/{len(PASSWORDS)}")
+                            print(
+                                f"\n[BOOTMODE] password prompt detected; "
+                                f"attempt {attempt_no}/{len(PASSWORDS)}"
+                            )
                             print(f"[TX] sending candidate: {candidate}")
 
-                            payload = candidate.encode("ascii") + b"\r"
-                            ser.write(payload)
-                            ser.flush()
-                            append_log(tx_path, payload)
-                            append_log(terminal_path, b"\n[HOST TX] password attempt %d: %s\\r\n" % (attempt_no, candidate.encode("ascii")))
-                            tx_total += len(payload)
+                            tx_total += send_password(
+                                ser,
+                                tx_path,
+                                terminal_path,
+                                candidate,
+                                attempt_no,
+                            )
 
+                            now = time.time()
                             attempt = {
                                 "attempt": attempt_no,
                                 "candidate": candidate,
-                                "sent_at_unix": time.time(),
+                                "sent_at_unix": now,
                                 "response_observed": None,
                             }
                             attempts.append(attempt)
 
-                            waiting_for_prompt = True
-                            prompt_deadline = time.time() + args.prompt_timeout
-                            post_password_buffer.clear()
+                            attempt_buffer.clear()
+                            last_password_sent_at = now
+                            response_deadline = now + args.prompt_timeout
+                            state = "WAIT_ATTEMPT_RESPONSE"
 
-                    # The first password prompt is handled separately so the
-                    # candidate is sent only after the prompt is actually seen.
-                    if password_prompt_seen and not attempts and not waiting_for_prompt:
-                        if password_index >= len(PASSWORDS):
-                            stop_reason = "password-list-exhausted"
-                            print("\n[BOOTMODE] password list exhausted.")
+                    if state == "WAIT_ATTEMPT_RESPONSE":
+                        attempt_buffer.extend(data)
+
+                        lower = attempt_buffer.lower()
+                        if any(marker.lower() in lower for marker in SUCCESS_MARKERS):
+                            attempts[-1]["response_observed"] = "success-marker"
+                            stop_reason = "success-marker-detected"
+                            print(
+                                "\n[BOOTMODE] possible success marker detected; stopping."
+                            )
                             break
 
-                        candidate = PASSWORDS[password_index]
-                        password_index += 1
-                        attempt_no = password_index
+                        # A repeated password prompt is treated as a failed
+                        # candidate only after the configured minimum delay.
+                        # This prevents prompt bytes already present in the same
+                        # serial chunk from being interpreted as a response to
+                        # the password we just sent.
+                        if (
+                            PASSWORD_PROMPT in attempt_buffer
+                            and last_password_sent_at is not None
+                            and time.time() - last_password_sent_at >= args.delay
+                        ):
+                            attempts[-1]["response_observed"] = "next-password-prompt"
+                            attempt_buffer.clear()
 
-                        print(f"\n[BOOTMODE] password prompt detected; attempt {attempt_no}/{len(PASSWORDS)}")
-                        print(f"[TX] sending candidate: {candidate}")
+                            if password_index >= len(PASSWORDS):
+                                stop_reason = "password-list-exhausted"
+                                print("\n[BOOTMODE] password list exhausted.")
+                                break
 
-                        payload = candidate.encode("ascii") + b"\r"
-                        ser.write(payload)
-                        ser.flush()
-                        append_log(tx_path, payload)
-                        append_log(terminal_path, b"\n[HOST TX] password attempt %d: %s\\r\n" % (attempt_no, candidate.encode("ascii")))
-                        tx_total += len(payload)
+                            candidate = PASSWORDS[password_index]
+                            password_index += 1
+                            attempt_no = password_index
 
-                        attempt = {
-                            "attempt": attempt_no,
-                            "candidate": candidate,
-                            "sent_at_unix": time.time(),
-                            "response_observed": None,
-                        }
-                        attempts.append(attempt)
+                            print(
+                                f"\n[BOOTMODE] repeated password prompt; "
+                                f"attempt {attempt_no}/{len(PASSWORDS)}"
+                            )
+                            print(f"[TX] sending candidate: {candidate}")
 
-                        waiting_for_prompt = True
-                        prompt_deadline = time.time() + args.prompt_timeout
-                        post_password_buffer.clear()
+                            tx_total += send_password(
+                                ser,
+                                tx_path,
+                                terminal_path,
+                                candidate,
+                                attempt_no,
+                            )
+
+                            now = time.time()
+                            attempt = {
+                                "attempt": attempt_no,
+                                "candidate": candidate,
+                                "sent_at_unix": now,
+                                "response_observed": None,
+                            }
+                            attempts.append(attempt)
+                            last_password_sent_at = now
+                            response_deadline = now + args.prompt_timeout
+                            state = "WAIT_ATTEMPT_RESPONSE"
 
                     keep = max(0, len(TRIGGER) - 1)
                     rolling = bytearray(search_buffer[-keep:]) if keep else bytearray()
@@ -254,11 +304,16 @@ def main() -> int:
                     except Exception:
                         pass
 
-                if waiting_for_prompt and prompt_deadline is not None and time.time() >= prompt_deadline:
-                    if attempts:
-                        attempts[-1]["response_observed"] = "no-next-password-prompt"
+                if (
+                    state == "WAIT_ATTEMPT_RESPONSE"
+                    and response_deadline is not None
+                    and time.time() >= response_deadline
+                ):
+                    attempts[-1]["response_observed"] = "no-response-within-timeout"
                     stop_reason = "no-next-password-prompt"
-                    print("\n[BOOTMODE] no next password prompt observed within timeout; stopping.")
+                    print(
+                        "\n[BOOTMODE] no password response within timeout; stopping."
+                    )
                     break
 
         except KeyboardInterrupt:
