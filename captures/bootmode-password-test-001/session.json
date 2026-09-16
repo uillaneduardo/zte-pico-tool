@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "device": "ZTE H3601P",
   "firmware": "zte-pico-tool uart_console v0.2.0",
   "transport": "usb-cdc",
@@ -30,22 +30,22 @@
   ],
   "prompt_timeout_seconds": 8.0,
   "delay_seconds": 1.5,
-  "started_at_unix": 1789531910.716157,
-  "finished_at_unix": 1789531915.820594,
+  "started_at_unix": 1789532134.939819,
+  "finished_at_unix": 1789532172.2542365,
   "trigger_seen": true,
-  "trigger_detected_at_unix": 1789531915.815935,
+  "trigger_detected_at_unix": 1789532140.787647,
   "response_sent": true,
-  "response_sent_at_unix": 1789531915.8189192,
+  "response_sent_at_unix": 1789532140.790354,
   "password_prompt_seen": false,
   "password_attempts": [],
-  "stop_reason": "success-marker-detected",
-  "rx_bytes": 1566,
+  "stop_reason": "keyboard-interrupt",
+  "rx_bytes": 1668,
   "tx_bytes": 1,
-  "stopped_by_keyboard_interrupt": false,
+  "stopped_by_keyboard_interrupt": true,
   "serial_disconnect_detected": false,
   "sha256": {
-    "rx.raw": "8b2cdcffe1fa4d1152b7855550b247d334c94a5c3d52cd28f77b1785d2ac549b",
+    "rx.raw": "4e5139b18b964e6dd0049107bf4bfb396321f1891a2b7f6f4d4e28135edd45e2",
     "tx.raw": "6b86b273ff34fce19d6b804eff5a3f5747ada4eaa22f1d49c01e52ddb7875b4b",
-    "terminal.log": "4d3634c90ce53b2da6167f3a11895272fac57129c4913aca3bac643dc40630ba"
+    "terminal.log": "de12caab2cf10f3c4ced81ae8b96a9da65f1572e0bbc8aea59a356ee1e54931c"
   }
 }

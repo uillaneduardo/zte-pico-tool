@@ -71,3 +71,8 @@ pdt_cspboot_init:917 Cspboot initialization is done.
 *** Press 1 means entering boot mode***
 
 [HOST TX] 1
+
+[TX] 0x31 '1'
+ 0 
+cspboot:1442 Entering boot mode ...
+*** Please input bootmode password: ***
