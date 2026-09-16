@@ -2,6 +2,35 @@
 
 Histórico das versões do `zte-pico-tool`.
 
+## [0.5.0] — 2026-09-15
+
+### Adicionado
+
+- Frames de captura de até 256 bytes para reduzir overhead no transporte USB.
+- Número de sequência independente para GP2 e GP3.
+- Detecção de lacunas de sequência no host.
+- Campo `frames_missing` nos metadados.
+- Protocolo `ZTE-CAPTURE-V2`.
+- Documentação do protocolo em `docs/protocol-v2.md`.
+- Exemplo documentado da captura real do H3601P em `docs/examples/h3601p-boot-capture-2026-09-15.md`.
+
+### Alterado
+
+- O firmware deixa de gerar um frame por byte e passa a agrupar bytes disponíveis em blocos de até 256 bytes.
+- O host passa a validar a sequência dos frames por canal.
+- A versão padrão registrada pelo host passa a ser `uart_capture v0.5.0`.
+- O esquema de metadados passa para a versão 2.
+
+### Limitações
+
+- A sequência detecta perda de frames no transporte/parsing, mas não prova ausência de overflow no buffer UART interno do Pico.
+- Não foi adotado teste artificial de carga de uma hora. A validação deve usar boots reais do equipamento, preservando o comportamento observado do roteador.
+- Nenhuma transmissão para o ZTE foi adicionada nesta versão.
+
+### Evidência usada como referência
+
+A captura real de 2026-09-15/16 registrou 9458 bytes em GP2 e zero bytes em GP3, chegando a `Starting kernel ...`. O bootloader reportou U-Boot 2013.04, SoC ZX279128S@A9, 128 MiB de RAM, NAND Toshiba 128 MiB 3,3 V 8-bit e duas imagens válidas, selecionando a imagem 0. A análise detalhada está em `docs/examples/h3601p-boot-capture-2026-09-15.md`.
+
 ## [0.3.0] — 2026-09-15
 
 ### Adicionado
@@ -91,6 +120,7 @@ No teste da v0.1.0 realizado em 2026-09-15, o pad 2 apresentou aproximadamente 2
 - Nenhuma transmissão para o equipamento-alvo.
 - Nenhuma operação SPI ou escrita em memória.
 
+[0.5.0]: https://github.com/uillaneduardo/zte-pico-tool
 [0.3.0]: https://github.com/uillaneduardo/zte-pico-tool
 [0.2.0]: https://github.com/uillaneduardo/zte-pico-tool
 [0.1.0]: https://github.com/uillaneduardo/zte-pico-tool
