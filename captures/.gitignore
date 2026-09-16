@@ -1,0 +1,4 @@
+# Real hardware captures are local evidence and are not versioned by default.
+*
+!.gitignore
+!.gitkeep
