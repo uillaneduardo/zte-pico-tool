@@ -30,29 +30,29 @@
   ],
   "prompt_timeout_seconds": 8.0,
   "delay_seconds": 1.5,
-  "started_at_unix": 1789532538.5805151,
-  "finished_at_unix": 1789532542.9110653,
+  "started_at_unix": 1789532601.9798152,
+  "finished_at_unix": 1789532605.791111,
   "trigger_seen": true,
-  "trigger_detected_at_unix": 1789532542.7988136,
+  "trigger_detected_at_unix": 1789532605.6787136,
   "response_sent": true,
-  "response_sent_at_unix": 1789532542.8008344,
+  "response_sent_at_unix": 1789532605.6815083,
   "password_prompt_seen": true,
   "password_attempts": [
     {
       "attempt": 1,
       "candidate": "Boot4128s!",
-      "sent_at_unix": 1789532542.9100392,
+      "sent_at_unix": 1789532605.7900453,
       "response_observed": "success-marker"
     }
   ],
   "stop_reason": "success-marker-detected",
-  "rx_bytes": 1669,
+  "rx_bytes": 1668,
   "tx_bytes": 12,
   "stopped_by_keyboard_interrupt": false,
   "serial_disconnect_detected": false,
   "sha256": {
-    "rx.raw": "535664ce34912c7011bb2048e5b10bfe12c85f459a16407ce6bdf48fe1867bdd",
-    "tx.raw": "76bb63a99c49ca5dc8bdb9d3f2621283311a15746a8ea1f0dd95df424a6660fe",
-    "terminal.log": "d24b512026ecb9ce70aac82df0a4534c29598f72c444affd86eb307edef882be"
+    "rx.raw": "142f0696ba858779d3ed1c39b2df10192155c187f9cbecfd7a8ede3abef99ba6",
+    "tx.raw": "0c9477ce04c4358293f3f1f4b1eeadf4e6ca9c1ce1f4c655957af8152df95770",
+    "terminal.log": "8a0b5a93f7dc161196bb750f277581ad3ce86714f003c2b8d95126d3d48ac473"
   }
 }
