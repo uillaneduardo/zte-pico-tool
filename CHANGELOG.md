@@ -14,12 +14,15 @@ Histórico das versões do `zte-pico-tool`.
 - Relatório de bytes descartados quando o buffer é excedido.
 - Saída ASCII com escapes e representação hexadecimal.
 - Captura individual de cada pad e captura simultânea dos dois pads.
+- Comando `c` para captura contínua até `x`, `Ctrl-C` ou encerramento da conexão USB.
+- Status periódico de aquisição durante o modo contínuo, sem despejar os dados no terminal durante a captura.
 - Documentação específica e notas de release em `docs/releases/v0.3.0.md`.
 
 ### Alterado
 
 - O projeto passa da análise temporal da v0.2.0 para a primeira tentativa de reconstrução de bytes UART.
 - A hipótese de 115200 8N1 é registrada como hipótese experimental, não como confirmação definitiva.
+- A documentação diferencia encerramento explícito por comando de EOF/desconexão USB.
 
 ### Segurança / escopo
 
@@ -29,6 +32,12 @@ Histórico das versões do `zte-pico-tool`.
 - O pad 1 continua desconectado.
 - Não há alimentação do ZTE pelo Pico.
 - Não há escrita em flash, SPI-NAND ou comandos de bootloader.
+
+### Limitações
+
+- A captura contínua não possui limite de tempo, mas o buffer permanece limitado a 8192 bytes por canal.
+- Quando o buffer fica cheio, novos bytes são contabilizados em `Dropped` e não são preservados.
+- Para aquisição realmente contínua, será necessário implementar streaming para o host ou armazenamento externo.
 
 ### Evidência que motivou a versão
 
