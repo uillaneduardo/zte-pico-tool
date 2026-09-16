@@ -2,7 +2,7 @@
 
 Ferramenta de hardware e software para investigação, diagnóstico, captura de console e aquisição **somente leitura** de dispositivos ZTE, inicialmente direcionada ao roteador **ZTE H3601P**.
 
-> **Status:** projeto em fase inicial de arquitetura e documentação. O repositório define a arquitetura antes da implementação do firmware e das ferramentas de host.
+> **Status:** investigação experimental ativa. A interface física encontrada no H3601P está sendo caracterizada de forma passiva antes de qualquer comunicação com o equipamento.
 
 ## Objetivo
 
@@ -11,6 +11,30 @@ O `zte-pico-tool` foi concebido para transformar um Raspberry Pi Pico em uma int
 Em uma segunda etapa, o projeto poderá oferecer aquisição de memória SPI-NAND quando o hardware, a tensão elétrica e a topologia do dispositivo forem conhecidos e seguros para leitura.
 
 O projeto **não pressupõe** que o Pico consiga extrair um firmware simplesmente pela UART. A UART fornece acesso ao console quando este está disponível; um dump bruto de flash depende de comandos expostos pelo bootloader ou de acesso físico à memória.
+
+## Estado atual da investigação
+
+Foram encontrados quatro pads em linha na placa do H3601P:
+
+```text
+Pad 1  → função ainda desconhecida / desconectado
+Pad 2  → conectado ao Pico GP2
+Pad 3  → conectado ao Pico GP3
+Pad 4  → GND confirmado
+```
+
+Os pads 1–3 apresentaram aproximadamente 3,3 V em repouso durante as medições iniciais. Isso não comprova a função dos pads.
+
+A v0.1.0 encontrou atividade intensa no pad 2. A v0.2.0 confirmou alta atividade temporal em GP2 e apenas uma borda em GP3. O GP2 atingiu o limite de 4096 bordas, com forte concentração em intervalos de 8–9 µs. Isso motivou a v0.3.0, que testa a hipótese de UART **115200 8N1** usando recepção PIO passiva.
+
+A hipótese atual é:
+
+```text
+ZTE pad 2 → possível TX → Pico GP2
+ZTE pad 3 → possível RX → Pico GP3
+```
+
+Essa atribuição ainda não é considerada confirmada.
 
 ## Princípios do projeto
 
@@ -29,9 +53,10 @@ O projeto **não pressupõe** que o Pico consiga extrair um firmware simplesment
 ┌───────────────────────────────┐
 │         Computador            │
 │                               │
-│  zte-tool / Python / CLI      │
+│  Tera Term / Python / CLI     │
 │  - configuração               │
 │  - captura                    │
+│  - análise                    │
 │  - dump                       │
 │  - verificação SHA-256        │
 │  - metadados                  │
@@ -43,7 +68,11 @@ O projeto **não pressupõe** que o Pico consiga extrair um firmware simplesment
 │                               │
 │  USB transport                │
 │       │                       │
+│       ├── passive UART RX     │
+│       │   (PIO / v0.3.0)      │
+│       │                       │
 │       ├── UART bridge          │
+│       │   (fase posterior)    │
 │       │                       │
 │       └── SPI controller      │
 │           (fase posterior)    │
@@ -59,6 +88,22 @@ O projeto **não pressupõe** que o Pico consiga extrair um firmware simplesment
 └───────────────────────────────┘
 ```
 
+## Firmware experimental
+
+### Activity Monitor v0.2.0
+
+Captura temporal de bordas em GP2/GP3 para investigar a temporização dos sinais. Usa interrupções e `micros()` e produz heurísticas de baud rate.
+
+### Passive UART Capture v0.3.0
+
+Primeira tentativa de reconstrução de bytes UART. Usa `SerialPIO`/PIO em dois canais RX-only, inicialmente configurados para 115200 8N1.
+
+```text
+firmware/pico/uart_capture/uart_capture.ino
+```
+
+A v0.3.0 **não transmite para o ZTE**. O lado TX dos `SerialPIO` é explicitamente desabilitado com `NOPIN`.
+
 ## Componentes
 
 ### 1. Firmware do Pico
@@ -71,6 +116,8 @@ Principais módulos planejados:
 - `usb_protocol.c` — protocolo entre computador e Pico.
 - `spi_nand.c` — controlador para SPI-NAND, em fase posterior.
 - `main.c` — inicialização e máquina de estados.
+
+Os sketches experimentais versionados atualmente ficam em `firmware/pico/`.
 
 ### 2. Ferramenta de host
 
@@ -92,6 +139,7 @@ Mantém informações específicas de cada revisão do H3601P: SoC, memória, UA
 
 | Modo | Finalidade | Estado |
 |---|---|---|
+| Passive UART Capture | Decodificar UART sem transmitir | **Experimental v0.3.0** |
 | UART Bridge | Encaminhar USB ↔ UART | Planejado |
 | Boot Capture | Gravar saída UART em arquivo | Planejado |
 | UART Info | Coletar identificação e versão | Planejado |
@@ -128,12 +176,10 @@ Também não é seguro tentar ler uma flash em circuito sem considerar a possibi
 zte-pico-tool/
 ├── firmware/
 │   └── pico/
-│       ├── src/
-│       │   ├── main.c
-│       │   ├── usb_protocol.c
-│       │   ├── uart.c
-│       │   └── spi_nand.c
-│       └── CMakeLists.txt
+│       ├── activity_monitor/
+│       │   └── activity_monitor.ino
+│       └── uart_capture/
+│           └── uart_capture.ino
 ├── host/
 │   └── python/
 │       ├── zte_tool.py
@@ -145,9 +191,12 @@ zte-pico-tool/
 │   ├── architecture.md
 │   ├── hardware.md
 │   ├── h3601p.md
-│   └── protocol.md
+│   ├── protocol.md
+│   ├── prompts/
+│   └── releases/
 ├── captures/
 │   └── .gitkeep
+├── CHANGELOG.md
 ├── README.md
 └── LICENSE
 ```
@@ -217,9 +266,13 @@ Há relatos comunitários de variantes H3601P V9.0.x utilizando SoC ZX279128S e 
 
 ### Fase 1 — UART
 
+- [x] Monitoramento elétrico inicial dos pads.
+- [x] Captura temporal de bordas.
+- [x] Heurística inicial de baud rate.
+- [x] Decodificação UART passiva experimental em 115200 8N1.
+- [ ] Validação da saída durante o boot.
 - [ ] Firmware mínimo USB ↔ UART.
 - [ ] Loopback de teste.
-- [ ] Configuração 115200 8N1.
 - [ ] Captura bruta de boot.
 - [ ] CLI para captura.
 - [ ] SHA-256 e metadados.
