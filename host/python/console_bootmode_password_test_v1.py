@@ -8,7 +8,6 @@ from pathlib import Path
 TRIGGER = b"Press 1 means entering boot mode"
 PASSWORD_PROMPT = b"Please input bootmode password"
 SUCCESS_MARKERS = (
-    b"cspboot:",
     b"bootmode>",
     b"Boot mode",
 )
@@ -74,6 +73,7 @@ def main() -> int:
     tx_total = 0
     rolling = bytearray()
     password_buffer = bytearray()
+    post_password_buffer = bytearray()
     password_index = 0
     attempts = []
     waiting_for_prompt = False
@@ -81,7 +81,7 @@ def main() -> int:
     stop_reason = None
 
     metadata = {
-        "schema_version": 2,
+        "schema_version": 3,
         "device": "ZTE H3601P",
         "firmware": "zte-pico-tool uart_console v0.2.0",
         "transport": "usb-cdc",
@@ -131,7 +131,6 @@ def main() -> int:
                     rx_total += len(data)
                     append_log(rx_path, data)
                     append_log(terminal_path, data)
-                    password_buffer.extend(data)
 
                     search_buffer = rolling + data
 
@@ -149,6 +148,7 @@ def main() -> int:
                         response_sent = True
                         metadata["response_sent"] = True
                         metadata["response_sent_at_unix"] = time.time()
+                        post_password_buffer.clear()
                         print("[BOOTLOADER] response sent; waiting for password prompt.")
 
                     if PASSWORD_PROMPT in password_buffer:
@@ -156,6 +156,64 @@ def main() -> int:
                         metadata["password_prompt_seen"] = True
                         password_buffer.clear()
 
+                    # Only evaluate password-related success/failure output after
+                    # a candidate has actually been submitted. This prevents the
+                    # pre-password 'cspboot:' bootloader log from being treated as
+                    # a successful bootmode transition.
+                    if waiting_for_prompt:
+                        post_password_buffer.extend(data)
+
+                        lower = post_password_buffer.lower()
+                        if any(marker.lower() in lower for marker in SUCCESS_MARKERS):
+                            if attempts:
+                                attempts[-1]["response_observed"] = "success-marker"
+                            stop_reason = "success-marker-detected"
+                            print("\n[BOOTMODE] possible success marker detected; stopping.")
+                            break
+
+                        if PASSWORD_PROMPT in post_password_buffer:
+                            if attempts:
+                                attempts[-1]["response_observed"] = "next-password-prompt"
+
+                            post_password_buffer.clear()
+                            password_buffer.clear()
+                            waiting_for_prompt = False
+                            prompt_deadline = None
+
+                            if password_index >= len(PASSWORDS):
+                                stop_reason = "password-list-exhausted"
+                                print("\n[BOOTMODE] password list exhausted.")
+                                break
+
+                            candidate = PASSWORDS[password_index]
+                            password_index += 1
+                            attempt_no = password_index
+
+                            print(f"\n[BOOTMODE] password prompt detected; attempt {attempt_no}/{len(PASSWORDS)}")
+                            print(f"[TX] sending candidate: {candidate}")
+
+                            payload = candidate.encode("ascii") + b"\r"
+                            ser.write(payload)
+                            ser.flush()
+                            append_log(tx_path, payload)
+                            append_log(terminal_path, b"\n[HOST TX] password attempt %d: %s\\r\n" % (attempt_no, candidate.encode("ascii")))
+                            tx_total += len(payload)
+
+                            attempt = {
+                                "attempt": attempt_no,
+                                "candidate": candidate,
+                                "sent_at_unix": time.time(),
+                                "response_observed": None,
+                            }
+                            attempts.append(attempt)
+
+                            waiting_for_prompt = True
+                            prompt_deadline = time.time() + args.prompt_timeout
+                            post_password_buffer.clear()
+
+                    # The first password prompt is handled separately so the
+                    # candidate is sent only after the prompt is actually seen.
+                    if password_prompt_seen and not attempts and not waiting_for_prompt:
                         if password_index >= len(PASSWORDS):
                             stop_reason = "password-list-exhausted"
                             print("\n[BOOTMODE] password list exhausted.")
@@ -185,7 +243,7 @@ def main() -> int:
 
                         waiting_for_prompt = True
                         prompt_deadline = time.time() + args.prompt_timeout
-                        time.sleep(args.delay)
+                        post_password_buffer.clear()
 
                     keep = max(0, len(TRIGGER) - 1)
                     rolling = bytearray(search_buffer[-keep:]) if keep else bytearray()
@@ -194,14 +252,6 @@ def main() -> int:
                         print(data.decode("utf-8", errors="replace"), end="", flush=True)
                     except Exception:
                         pass
-
-                    lower = password_buffer.lower()
-                    if any(marker.lower() in lower for marker in SUCCESS_MARKERS):
-                        if attempts:
-                            attempts[-1]["response_observed"] = "success-marker"
-                        stop_reason = "success-marker-detected"
-                        print("\n[BOOTMODE] possible success marker detected; stopping.")
-                        break
 
                 if waiting_for_prompt and prompt_deadline is not None and time.time() >= prompt_deadline:
                     if attempts:
